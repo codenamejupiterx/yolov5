@@ -7,41 +7,159 @@
 
 import torch
 import os
+import json
+import datetime
+import time
+import shutil
+from os.path import exists
 
-# Model
-#model = torch.hub.load('ultralytics/yolov5', 'yolov5s')  # or yolov5n - yolov5x6, custom
-#-----------------------------------------------------------------------------------------------------------------------------------------
-#head_detection
-#model = torch.hub.load('ultralytics/yolov5', 'custom','/Users/benjaminhall/Documents/GitHub/yolov5/runs/train/exp9/weights/best.pt', force_reload=True)
+with open("facdet_config.json", "r") as json_file:
+    json_load = json.load(json_file)
 
-# path_to_back_of_head_pic = "/Users/benjaminhall/Desktop/crowd_heads_back.png"
-# path_to_front_of_head_pic = "/Users/benjaminhall/Desktop/crowd_heads_front.png"
-# path_to_back_of_head_pic_1 = "/Users/benjaminhall/Downloads/back_of_heads_1.jpg"
-# path_to_side_of_head_pic_1 = "/Users/benjaminhall/Downloads/sides_of_heads_1.jpg"
-# path_to_front_and_side_of_head_pic_1 = "/Users/benjaminhall/Downloads/side_and_front_of_head_pic_1.jpg"
+EVENT_STREAM = []
+WEIGHTS_PATH = json_load["weights_path"]
+IMAGE_PATH = json_load["image_path"]
+VID_PATH = json_load["vid_path"]
+EVENT_STREAM_PATH = json_load["event_stream_path"]
 
-# pic_list = [path_to_back_of_head_pic_1,path_to_side_of_head_pic_1,path_to_front_and_side_of_head_pic_1]
-#-----------------------------------------------------------------------------------------------------------------------------------------
-pool_talk = "/Users/benjaminhall/Documents/GitHub/yolov5/Screen Shot 2022-11-25 at 2.29.26 PM.png"
-vid_path = "/Users/benjaminhall/Movies/TRMC_love_and_hip-hop_test_vids/TRMC_love_and_hip-hop_test_vid1_frames"
-#facial_recognition
-model = torch.hub.load('ultralytics/yolov5', 'custom','/Users/benjaminhall/Documents/GitHub/yolov5/runs/train/exp13-face_recog_love_and_hip-hop/weights/best.pt', force_reload=True)
 
-for i in range(len(os.listdir(vid_path))):
 
-    # Images
-    #img = path_to_front_of_head_pic  # or file, Path, PIL, OpenCV, numpy, list
-    #img = pic_list[i]
-    img = "/Users/benjaminhall/Movies/TRMC_love_and_hip-hop_test_vids/TRMC_love_and_hip-hop_test_vid1_frames/"+str(i)+".jpg"
+# initialize event stream file
+time_that_facdet_event_stream_began = datetime.datetime.utcnow()
+time_that_individual_event_begins = ""
+time_that_individual_event_ends = ""
 
-    # Inference
-    results = model(img)
+
+
+
+# Getting Timestamp info
+# https://www.geeksforgeeks.org/get-current-timestamp-using-python/
+# beginning timestamp
+stream_process = {
+    "ProcessorType": "FireAndSmokeDetector",
+    "StreamStart": str(time_that_facdet_event_stream_began),
+    "Events": [],
+}
+
+with open(EVENT_STREAM_PATH, "w") as outfile:
+    json.dump(stream_process, outfile, indent=4)
+
+def delete_former_event_stream(EVENT_STREAM_PATH: str) -> None:
+    """Will take the path to the "fsd_event_stream" file in the project directory.
+    Deletes the previous "fsd_event_stream" file.
+    Args:
+        EVENT_STREAM_PATH (str): Path to the "fsd_event_stream" json file in the directory.
+    Return:
+        -NONE-
+    """
+    if exists(EVENT_STREAM_PATH):
+        os.remove(EVENT_STREAM_PATH)
+        time.sleep(10)
+
+def event_stream_writer(starting_time, ending_time) -> None:
+    """Will take a pandas dataframe holding results/stats from an individual video frame.
+    It uses the results/stats to write out the event stream for the module.
+    Args:
+        result_dataframe (pd.DataFrame): Pandas data-structure that holds information about the inferences found in the current frame.
+        preview_list_dict (list): Preview list of 2 dictionaries, 1. Type = "Image", 2 Path= "...path to that image..."
+        starting_time (pd.DataFrame): Event starting time value held in a Pandas data-structure.
+        ending_time (pd.DataFrame): Event ending time value held in a Pandas data-structure.
+        smoke_event_or_fire_event (str): String vaules of either "fire" or "smoke".
+        starting_frame_nums (int): Frame number of a starting event.
+        ending_frame_nums (int): Frame number of a ending event.
+    Return:
+          -NONE-
+    """
+    event_details = []
+    preview_list = []
+    fire_frame_num_check = {}
+
+   
+
+       
+
+  
+
+    start = starting_time - time_that_facdet_event_stream_began
+    end = ending_time - time_that_facdet_event_stream_began
+
+    
+    event = {
+        "Type": "Face-Detect-Event",
+        "Start": start.total_seconds(),
+        "End": end.total_seconds(),
+        "Attribute": event_details,
+        "Previews": preview_list,
+    }
+    
+
+    # appending to EVENT list in Json object json file
+    stream_process["Events"].append(event)
+
+    # writing the new list element to the file
+    with open(EVENT_STREAM_PATH, "w") as outfile:
+        json.dump(stream_process, outfile, indent=4)
+
+
+
+
+def main():
+
+    global time_that_individual_event_begins
+    global time_that_individual_event_ends
+
+    #facial_recognition
+    model = torch.hub.load('ultralytics/yolov5', 'custom',WEIGHTS_PATH, force_reload=True)
+
+    #----------for single image---------------------#
+
+    # time when individual event begin(ending time is in the event steam writer function)
+    
+    time_that_individual_event_begins = datetime.datetime.utcnow()
+
+    #Inference
+    results = model(IMAGE_PATH)
 
     # Results
-    #results.show()
+    results.show()
     results.save()
     results.print()
-    """ print(results)
+    print(results.pandas().xyxy[0])  # im predictions (pandas)
+    time_that_individual_event_ends = datetime.datetime.utcnow()
+    # Sending info to the event sream writer
+    event_stream_writer(time_that_individual_event_begins, time_that_individual_event_ends) 
+    #-----------------------------------------------#
 
-    import wandb
-    wandb.login() """
+
+
+    #------------for video frames--------------------#
+
+    #for i in range(len(os.listdir(vid_path))):
+    for i in range(407,930):
+
+        # Images
+        #img = path_to_front_of_head_pic  # or file, Path, PIL, OpenCV, numpy, list
+        #img = pic_list[i]
+        video_frame = VID_PATH+str(i)+".jpg"
+
+        
+        time_that_individual_event_begins = datetime.datetime.utcnow()
+
+        # Inference
+        results = model(video_frame)
+
+        # Results
+        #results.show()
+        results.save()
+        results.print()
+        print(results.pandas().xyxy[0])  # im predictions (pandas)
+        time_that_individual_event_ends = datetime.datetime.utcnow()
+
+    # Sending info to the event sream writer
+        event_stream_writer(time_that_individual_event_begins, time_that_individual_event_ends)    
+    #-----------------------------------------------------------#
+
+        
+if __name__ == "__main__":
+    delete_former_event_stream(EVENT_STREAM_PATH)
+    main()
